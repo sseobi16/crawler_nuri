@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  # 1. 과거 데이터 수집 
+  history-loader:
+    build: .
+    image: nuri-crawler
+    container_name: nuri-history
+    volumes:
+      - ./data:/app/data
+    command: ["--mode", "history", "--start", "${HISTORY_START}", "--end", "${HISTORY_END}"]
+    environment:
+      - TZ=${TZ}
+
+  # 2. 인터벌 감시
+  monitor-interval:
+    build: .
+    image: nuri-crawler
+    container_name: nuri-interval
+    volumes:
+      - ./data:/app/data
+    command: ["--mode", "interval", "--interval", "${INTERVAL_SEC}"]
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+
+  # 3. 정시 스케줄 감시
+  monitor-cron:
+    build: .
+    image: nuri-crawler
+    container_name: nuri-cron
+    volumes:
+      - ./data:/app/data
+    command: ["--mode", "cron", "--hour", "${CRON_HOUR}"]
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}

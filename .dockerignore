@@ -1,0 +1,17 @@
+# Git
+.git
+.gitignore
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Data (데이터는 컨테이너 안에 복사하지 않고, Volume으로 연결함)
+data/
+
+# IDE
+.vscode/
+.idea/

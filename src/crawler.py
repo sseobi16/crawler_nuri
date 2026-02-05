@@ -89,6 +89,23 @@ class NuriCrawler:
             except Exception as e:
                 print(f"[ERROR] Search failed: {e}")
                 return False
+    
+    # 입찰 공고 일반 탭으로 고정
+    async def _ensure_general_tab_active(self):
+        try:
+            tab_link = self.page.locator("a[title='입찰공고일반']")
+            if await tab_link.count() > 0:
+                parent_li = tab_link.locator("xpath=../..") 
+                class_attr = await parent_li.get_attribute("class")
+                
+                if "w2tabcontrol_selected" not in class_attr:
+                    # print("[INFO] Switching to '입찰공고일반' tab...")
+                    await tab_link.click()
+                    await self.page.wait_for_selector("#mf_wfm_container_tabControl1_contents_content1_body", state="visible", timeout=5000)
+                    await self.page.wait_for_timeout(500)
+        except Exception as e:
+            print(f"[WARN] Tab switching error: {e}")
+
 
     # 입찰 공고 목록 상세 페이지 조회
     async def crawl_period_pages(self, save_callback, stop_on_duplicate=False):

@@ -106,6 +106,32 @@ class NuriCrawler:
         except Exception as e:
             print(f"[WARN] Tab switching error: {e}")
 
+    # 텍스트, 인풋 박스에 대한 데이터 추출
+    async def _get_element_value(self, element):
+
+        try:
+            # 1. 일반 텍스트 추출
+            text = clean_text(await element.inner_text())
+            if text:
+                return text
+
+            # 2. Input 태그 값 추출
+            input_el = element.locator("input").first
+            if await input_el.count() > 0:
+                val = await input_el.get_attribute("value")
+                if val: return clean_text(val)
+
+            # 3. Select 태그 값 시도
+            select_el = element.locator("select").first
+            if await select_el.count() > 0:
+                # 선택된 옵션의 텍스트 가져오기
+                val = await select_el.evaluate("el => el.options[el.selectedIndex].text")
+                if val and "선택" not in val: return clean_text(val)
+                
+        except Exception:
+            pass
+        return ""
+
     # 테이블 파싱 (th, td 쌍 매핑)
     async def _parse_table(self, container_locator):
         data = {}
@@ -115,19 +141,17 @@ class NuriCrawler:
             
             for i in range(count):
                 row = rows.nth(i)
-                
                 row_ths = await row.locator("th").all()
                 row_tds = await row.locator("td").all()
                 
-                # 보통 th 다음에 td가 오는 구조이므로 순서대로 짝을 맞춤
                 loop_len = min(len(row_ths), len(row_tds))
                 for j in range(loop_len):
                     key = clean_text(await row_ths[j].inner_text())
-                    val = clean_text(await row_tds[j].inner_text())
+                    val = await self._get_element_value(row_tds[j])
                     if key:
                         data[key] = val
         except Exception as e:
-            print(f"[WARN] Table parsing error: {e}")
+            print(f"[Error] Table parsing error: {e}")
         return data
     
     # 그리드 내 정보 파싱
@@ -152,9 +176,9 @@ class NuriCrawler:
                 has_data = False
                 for cell in cells:
                     col_id = await cell.get_attribute("col_id")
-                    # 체크박스나 버튼 컬럼은 제외
+                    # value 추출
                     if col_id and "chk" not in col_id.lower() and "btn" not in col_id.lower():
-                        val = clean_text(await cell.inner_text())
+                        val = await self._get_element_value(cell)
                         row_data[col_id] = val
                         if val: has_data = True
                 
@@ -174,6 +198,13 @@ class NuriCrawler:
         #  입찰공고일반 탭으로 고정
         await self._ensure_general_tab_active()
 
+        # 스크롤 다운
+        try:
+            await self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await self.page.wait_for_timeout(1000) # 렌더링 대기
+        except Exception as e:
+            print(f"[Error] Scroll down failed: {e}")
+
         # 각 세션별 데이터 추출
         try:
             # 존재하는 제목(.df_title) 추출
@@ -189,10 +220,10 @@ class NuriCrawler:
                 if not section_name:
                     continue
 
-                # 제목을 감싸는 박스(.dfbox)를 찾고
+                # 제목을 감싸는 박스(.dfbox) 찾기
                 header_box = title_el.locator("xpath=ancestor::div[contains(@class, 'dfbox')]")
                 
-                # 바로 다음에 오는 형제 div가 내용 박스
+                # 컨텐츠 박스 찾기
                 content_box = header_box.locator("xpath=following-sibling::div[1]")
                 
                 if await content_box.count() == 0 or not await content_box.is_visible():
@@ -206,7 +237,7 @@ class NuriCrawler:
                 if not (has_grid or has_table):
                     continue
 
-                # 내용 텍스트 검사 (달력, 검색창 차단)
+                # 내용 텍스트 검사 
                 content_text = await content_box.inner_text()
                 
                 # 달력(Calendar) 차단

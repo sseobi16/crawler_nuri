@@ -37,6 +37,49 @@ class NuriCrawler:
             await self.browser.close()
             print("[INFO] Browser closed.")
 
+    # 팝업/모달 제거
+    async def _clear_overlays(self):
+ 
+        try:
+            # 1. ESC 키로 닫기 시도
+            await self.page.keyboard.press("Escape")
+            
+            # 2. '닫기' 버튼이 명확히 보이면 클릭
+            close_btns = self.page.locator(".w2window_close, .w2popup_close, input[value='닫기'], button:has-text('닫기')")
+            
+            count = await close_btns.count()
+            if count > 0:
+                # 여러 개의 닫기 버튼 클릭
+                for i in range(count):
+                    btn = close_btns.nth(i)
+                    if await btn.is_visible():
+                        await btn.click(force=True)
+                        await self.page.wait_for_timeout(200)
+
+            #  해결되지 않은 팝업/모달 숨김 처리
+            await self.page.evaluate("""
+                () => {
+                    const selectors = [
+                        '.w2window',           // 팝업창
+                        '.w2modal',            // 모달 배경
+                        '.w2popup_window',     // 팝업 윈도우
+                        '.w2modal_overlay',    // 투명 방해막
+                        'div[role="dialog"]',  // 다이얼로그
+                        '#___processbar2'      // 로딩바
+                    ];
+                    
+                    const elements = document.querySelectorAll(selectors.join(','));
+                    elements.forEach(el => {
+                        el.style.display = 'none'; 
+                        el.style.visibility = 'hidden';
+                        el.style.zIndex = '-9999'; // 뒤로 보내버리기
+                    });
+                }
+            """)
+            
+        except Exception:
+            pass
+
     async def _input_date_field(self, selector, date_str):
         try:
             await self.page.click(selector)
@@ -60,6 +103,8 @@ class NuriCrawler:
                     await self.page.wait_for_selector("#___processbar2", state="hidden", timeout=10000)
                 except:
                     pass 
+
+                await self._clear_overlays()
 
                 print("[DEBUG] Hovering main menu...")
                 main_menu = self.page.locator("text=입찰공고").locator("visible=true").first
@@ -343,6 +388,8 @@ class NuriCrawler:
 
             next_page = current_page + 1
             try:
+                await self._clear_overlays()
+
                 next_num_btn = self.page.locator(f"a.w2pageList_control_label[index='{next_page}']")
                 next_group_btn = self.page.locator("#mf_wfm_container_pagelist_next_btn")
 

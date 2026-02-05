@@ -106,6 +106,65 @@ class NuriCrawler:
         except Exception as e:
             print(f"[WARN] Tab switching error: {e}")
 
+    # 테이블 파싱 (th, td 쌍 매핑)
+    async def _parse_table(self, container_locator):
+        data = {}
+        try:
+            rows = container_locator.locator("tr")
+            count = await rows.count()
+            
+            for i in range(count):
+                row = rows.nth(i)
+                
+                row_ths = await row.locator("th").all()
+                row_tds = await row.locator("td").all()
+                
+                # 보통 th 다음에 td가 오는 구조이므로 순서대로 짝을 맞춤
+                loop_len = min(len(row_ths), len(row_tds))
+                for j in range(loop_len):
+                    key = clean_text(await row_ths[j].inner_text())
+                    val = clean_text(await row_tds[j].inner_text())
+                    if key:
+                        data[key] = val
+        except Exception as e:
+            print(f"[WARN] Table parsing error: {e}")
+        return data
+    
+    # 그리드 내 정보 파싱
+    async def _parse_grid(self, container_locator):
+        data_list = []
+        try:
+            tbody = container_locator.locator("tbody")
+            if await tbody.count() == 0:
+                return data_list
+                
+            rows = tbody.locator("tr")
+            row_count = await rows.count()
+            
+            for i in range(row_count):
+                row = rows.nth(i)
+                if "데이터가 없음" in await row.inner_text():
+                    continue
+                    
+                row_data = {}
+                cells = await row.locator("td").all()
+                
+                has_data = False
+                for cell in cells:
+                    col_id = await cell.get_attribute("col_id")
+                    # 체크박스나 버튼 컬럼은 제외
+                    if col_id and "chk" not in col_id.lower() and "btn" not in col_id.lower():
+                        val = clean_text(await cell.inner_text())
+                        row_data[col_id] = val
+                        if val: has_data = True
+                
+                if has_data:
+                    data_list.append(row_data)
+        except Exception:
+            pass
+        return data_list
+    
+    
 
     # 입찰 공고 목록 상세 페이지 조회
     async def crawl_period_pages(self, save_callback, stop_on_duplicate=False):

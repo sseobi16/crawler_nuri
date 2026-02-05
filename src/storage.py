@@ -53,7 +53,16 @@ class DataStorage:
 
             # CSV 저장을 위해 리스트나 딕셔너리 형태의 필드를 JSON 문자열로 변환
             processed_data = data_dict.copy()
-          
+            json_fields = ["general_info", "items", "files"]
+            
+            for field in json_fields:
+                if field in processed_data:
+                    # 한글 깨짐 방지
+                    processed_data[field] = json.dumps(
+                        processed_data[field], 
+                        ensure_ascii=False
+                    )
+
             # CSV 저장 
             df = pd.DataFrame([processed_data])
             

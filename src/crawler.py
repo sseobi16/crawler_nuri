@@ -164,7 +164,79 @@ class NuriCrawler:
             pass
         return data_list
     
-    
+    # 동적 섹션 정보 추출 (실제 데이터 수집 로직)
+    async def extract_detail_info(self):
+        detail_data = {
+            "sections": {},
+            "files": []
+        }
+
+        #  입찰공고일반 탭으로 고정
+        await self._ensure_general_tab_active()
+
+        # 각 세션별 데이터 추출
+        try:
+            # 존재하는 제목(.df_title) 추출
+            titles = await self.page.locator(".df_tit").all()
+            
+            for title_el in titles:
+                if not await title_el.is_visible():
+                    continue
+                    
+                section_name = clean_text(await title_el.inner_text())
+                
+                # 빈 제목 제외
+                if not section_name:
+                    continue
+
+                # 제목을 감싸는 박스(.dfbox)를 찾고
+                header_box = title_el.locator("xpath=ancestor::div[contains(@class, 'dfbox')]")
+                
+                # 바로 다음에 오는 형제 div가 내용 박스
+                content_box = header_box.locator("xpath=following-sibling::div[1]")
+                
+                if await content_box.count() == 0 or not await content_box.is_visible():
+                    continue 
+
+                # 그리드 또는 테이블 존재 여부 확인
+                has_grid = await content_box.locator(".w2grid").count() > 0
+                has_table = await content_box.locator("table.w2tb").count() > 0
+
+                # 단순 텍스트 건너뛰기
+                if not (has_grid or has_table):
+                    continue
+
+                # 내용 텍스트 검사 (달력, 검색창 차단)
+                content_text = await content_box.inner_text()
+                
+                # 달력(Calendar) 차단
+                if ("Sunday" in content_text and "Monday" in content_text) or \
+                   ("일요일" in content_text and "월요일" in content_text):
+                    continue
+                
+                # 검색 필터 차단
+                if "검색" in content_text and "초기화" in content_text:
+                    continue
+
+                # 데이터 추출
+                if has_grid:
+                    grid_el = content_box.locator("div.w2grid").first
+                    grid_data = await self._parse_grid(grid_el)
+                    
+                    if "파일" in section_name:
+                        detail_data["files"] = grid_data
+                    else:
+                        detail_data["sections"][section_name] = grid_data
+
+                elif has_table:
+                    table_el = content_box.locator("table.w2tb").first
+                    table_data = await self._parse_table(table_el)
+                    detail_data["sections"][section_name] = table_data
+
+        except Exception as e:
+            print(f"[WARN] Dynamic section scan failed: {e}")
+
+        return detail_data
 
     # 입찰 공고 목록 상세 페이지 조회
     async def crawl_period_pages(self, save_callback, stop_on_duplicate=False):

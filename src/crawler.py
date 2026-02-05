@@ -155,10 +155,13 @@ class NuriCrawler:
     async def _get_element_value(self, element):
 
         try:
-            # 1. 일반 텍스트 추출
-            text = clean_text(await element.inner_text())
-            if text:
-                return text
+
+            # 1. Select 태그 값 시도
+            select_el = element.locator("select").first
+            if await select_el.count() > 0:
+                # 선택된 옵션의 텍스트 가져오기
+                val = await select_el.evaluate("el => el.options[el.selectedIndex].text")
+                if val and "선택" not in val: return clean_text(val)
 
             # 2. Input 태그 값 추출
             input_el = element.locator("input").first
@@ -166,12 +169,10 @@ class NuriCrawler:
                 val = await input_el.get_attribute("value")
                 if val: return clean_text(val)
 
-            # 3. Select 태그 값 시도
-            select_el = element.locator("select").first
-            if await select_el.count() > 0:
-                # 선택된 옵션의 텍스트 가져오기
-                val = await select_el.evaluate("el => el.options[el.selectedIndex].text")
-                if val and "선택" not in val: return clean_text(val)
+            # 3. 일반 텍스트 추출
+            text = clean_text(await element.inner_text())
+            if text:
+                return text
                 
         except Exception:
             pass

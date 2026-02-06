@@ -205,6 +205,22 @@ class NuriCrawler:
     async def _parse_grid(self, container_locator):
         data_list = []
         try:
+            # 헤더 텍스트 추출하기
+            headers = []
+            header_row = container_locator.locator("thead tr").first
+            
+            if await header_row.count() > 0:
+                ths = await header_row.locator("th").all()
+                for th in ths:
+                    # 헤더 텍스트 정제
+                    text = clean_text(await th.inner_text())
+                    headers.append(text)
+            
+            # 헤더를 못 찾았으면 빈 리스트 반환 (또는 기존 로직 fallback 가능하나 여기선 패스)
+            if not headers:
+                return data_list
+
+            # 본문 데이터 추출
             tbody = container_locator.locator("tbody")
             if await tbody.count() == 0:
                 return data_list
@@ -214,23 +230,33 @@ class NuriCrawler:
             
             for i in range(row_count):
                 row = rows.nth(i)
+                # 데이터가 없는 그리드 건너뜀
                 if "데이터가 없음" in await row.inner_text():
                     continue
                     
                 row_data = {}
                 cells = await row.locator("td").all()
                 
+                # 헤더 개수와 셀 개수 중 작은 쪽에 맞춰 루프
+                loop_len = min(len(headers), len(cells))
+                
                 has_data = False
-                for cell in cells:
-                    col_id = await cell.get_attribute("col_id")
-                    # value 추출
-                    if col_id and "chk" not in col_id.lower() and "btn" not in col_id.lower():
-                        val = await self._get_element_value(cell)
-                        row_data[col_id] = val
-                        if val: has_data = True
+                for j in range(loop_len):
+                    key = headers[j]
+                    
+                    # 의미 없는 컬럼(순서, 체크박스) 제외
+                    if not key or key in ["No", "NO", "선택", "미리보기"]:
+                        continue
+                        
+                    # value 값 추출
+                    val = await self._get_element_value(cells[j])
+                    
+                    row_data[key] = val
+                    if val: has_data = True
                 
                 if has_data:
                     data_list.append(row_data)
+                    
         except Exception:
             pass
         return data_list

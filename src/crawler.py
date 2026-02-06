@@ -164,7 +164,8 @@ class NuriCrawler:
                 if val and "선택" not in val: return clean_text(val)
 
             # 2. Input 태그 값 추출
-            input_el = element.locator("input").first
+            # 버튼 타입 제외
+            input_el = element.locator("input:not([type='button']):not([type='submit']):not([type='hidden'])").first
             if await input_el.count() > 0:
                 val = await input_el.get_attribute("value")
                 if val: return clean_text(val)

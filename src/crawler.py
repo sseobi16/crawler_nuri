@@ -121,6 +121,8 @@ class NuriCrawler:
 
                 print("[DEBUG] Clicking search button...")
                 await self.page.click("input[value='검색']")
+
+                await self.page.wait_for_timeout(1500)
                 
                 try:
                     await self.page.wait_for_selector("#___processbar2", state="hidden", timeout=5000)
@@ -343,9 +345,19 @@ class NuriCrawler:
         return detail_data
 
     # 입찰 공고 목록 상세 페이지 조회
-    async def crawl_period_pages(self, save_callback, stop_on_duplicate=False):
+    async def crawl_period_pages(self, save_callback, stop_on_duplicate=False, cutoff_date=None):
 
         current_page = 1
+
+        cutoff_dt = None
+        if cutoff_date:
+            try:
+                cutoff_dt = datetime.strptime(cutoff_date, "%Y%m%d")
+            except:
+                pass
+
+        consecutive_old_count = 0
+        MAX_OLD_COUNT = 3
         
         while True:
             print(f"[INFO] Processing list page {current_page}...")
@@ -372,6 +384,32 @@ class NuriCrawler:
                     
                     if await id_cell.count() == 0 or await title_link.count() == 0:
                         continue
+
+                    # 컷오프 날짜 검사
+                    if cutoff_dt:
+                        row_text = await row.inner_text()
+                        date_match = re.search(r"(\d{4})/(\d{2})/(\d{2})", row_text)
+                        
+                        if date_match:
+                            row_date_str = f"{date_match.group(1)}{date_match.group(2)}{date_match.group(3)}"
+                            row_dt = datetime.strptime(row_date_str, "%Y%m%d")
+                            
+                            # 공고 게시 일시가 설정한 시작일보다 과거인 경우
+                            if row_dt < cutoff_dt:
+                                consecutive_old_count += 1
+                                print(f"[INFO] 과거 데이터 발견 ({row_date_str})")
+                                
+                                # 연속 3회 이상 과거 날짜면 종료 신호
+                                if consecutive_old_count >= MAX_OLD_COUNT:
+                                    print(f"[INFO] 날짜 범위 초과 확인. 수집을 종료합니다.")
+                                    stop_signal = True
+                                    break
+                                
+                                continue 
+                            else:
+                                # 최신 날짜가 나오면 카운트 리셋
+                                consecutive_old_count = 0
+
 
                     notice_id = clean_text(await id_cell.inner_text())
                     title = clean_text(await title_link.inner_text())

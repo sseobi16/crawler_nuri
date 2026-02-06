@@ -81,8 +81,8 @@ async def run_task(mode, args, storage):
             stop_on_duplicate = False 
         else:
             # Interval / Cron 모드
-            start_date = get_today_str()
-            end_date = get_yesterday_str
+            start_date = get_yesterday_str()
+            end_date = get_today_str()
             # 이미 수집한 데이터가 나오면 즉시 종료
             stop_on_duplicate = True
 
@@ -109,7 +109,8 @@ async def run_task(mode, args, storage):
             # 페이지 순회 시작
             await crawler.crawl_period_pages(
                 save_callback=save_callback,
-                stop_on_duplicate=stop_on_duplicate
+                stop_on_duplicate=stop_on_duplicate,
+                cutoff_date=start_date
             )
             
     except Exception as e:

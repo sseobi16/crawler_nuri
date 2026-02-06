@@ -8,6 +8,59 @@ from src.storage import DataStorage
 from src.crawler import NuriCrawler
 from src.utils import get_today_str, get_yesterday_str
 
+def validate_arguments(args):
+    if args.mode == "history":
+        if not args.start or not args.end:
+            print("[ERROR] 'history' 모드는 --start와 --end 날짜가 필수입니다.")
+            sys.exit(1)
+        
+        try:
+            # 날짜 포맷 검증
+            if len(args.start) != 8 or not args.start.isdigit():
+                raise ValueError(f"시작일({args.start})은 8자리 숫자여야 합니다.")
+            if len(args.end) != 8 or not args.end.isdigit():
+                raise ValueError(f"종료일({args.end})은 8자리 숫자여야 합니다.")
+            
+            start_dt = datetime.strptime(args.start, "%Y%m%d")
+            end_dt = datetime.strptime(args.end, "%Y%m%d")
+            
+            # 시작일이 종료일보다 늦으면 안 됨
+            if start_dt > end_dt:
+                print(f"[ERROR] 시작일({args.start})이 종료일({args.end})보다 늦을 수 없습니다.")
+                sys.exit(1)
+                
+            # 미래 날짜 방지 
+            if end_dt > datetime.now():
+                print("[ERROR] 종료일이 미래입니다. 오늘 날짜까지만 검색될 수 있습니다.")
+                sys.exit(1)
+                
+        except ValueError as ve:
+            print("[ERROR] 날짜 형식이 올바르지 않습니다.")
+            print(f"원인: {ve}")
+            sys.exit(1)
+
+    # 2. Interval 모드 검증
+    elif args.mode == "interval":
+        if args.interval < 60:
+            print("[ERROR] --interval은 최소 60초 이상이어야 합니다.")
+            sys.exit(1)
+
+        if args.interval > 86400:
+            print(f"[WARN] --interval 값이 매우 큽니다 ({args.interval}초). 권장 최대값은 86400초(24시간)입니다.")
+            sys.exit(1)
+
+    # 3. Cron 모드 검증
+    elif args.mode == "cron":
+        if not (0 <= args.hour <= 23):
+            print(f"[ERROR] --hour 값은 0부터 23 사이의 정수여야 합니다. (입력값: {args.hour})")
+            sys.exit(1)
+
+    # 불필요 파라미터 경고 (무시 처리)
+    if args.mode != "history" and (args.start or args.end):
+        print("[WARN] 현재 모드에서는 --start, --end 파라미터가 무시됩니다.")
+
+    return True
+
 async def run_task(mode, args, storage):
 
     # 디버깅 시 False
@@ -75,6 +128,9 @@ def main():
     parser.add_argument("--hour", type=int, default=9, help="Cron hour (0-23)")
     
     args = parser.parse_args()
+
+    # 인자 검증
+    validate_arguments(args)
 
     # 저장소 초기화
     storage = DataStorage()

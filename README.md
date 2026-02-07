@@ -26,13 +26,13 @@ mkdir data
 원하는 날짜 구간을 지정하여 실행합니다. (YYYYMMDD)
 
 ```bash
-# 2026/01/01 - 2026/01/31 데이터 수집
+# 2026/02/01 - 2026/02/05 데이터 수집
 
 # Mac / Linux
-HISTORY_START=20260101 HISTORY_END=20260131 docker-compose up history-loader
+HISTORY_START=20260201 HISTORY_END=20260205 docker-compose up history-loader
 
 # Windows (PowerShell)
-$env:HISTORY_START="20260101"; $env:HISTORY_END="20260131"; docker-compose up history-loader
+$env:HISTORY_START="20260201"; $env:HISTORY_END="20260205"; docker-compose up history-loader
 ```
 
 ### 2. 실시간 감지
@@ -63,6 +63,10 @@ $env:CRON_HOUR="9"; docker-compose up monitor-cron
 ## 결과물 확인 (Output)
 수집된 데이터는 프로젝트 폴더 내 data/ 디렉토리에 저장됩니다.
 
-* output.csv: 수집된 입찰 공고 상세 정보 (Excel로 열람 가능)
+* nuri_data.jsonl: 수집된 입찰 공고 상세 정보가 저장되는 파일 (JSON Lines 포맷)
+* visited_ids.txt: 중복 수집 방지를 위해 수집 완료된 공고 번호 목록
 
-* visited_ids.txt: 중복 수집 방지를 위한 ID 기록
+```bash
+# 수집 데이터 출력
+python check_data.py
+```

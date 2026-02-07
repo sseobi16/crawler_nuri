@@ -34,8 +34,11 @@ class NuriCrawler:
 
     async def close_browser(self):
         if self.browser:
-            await self.browser.close()
-            print("[INFO] Browser closed.")
+            try:
+                await self.browser.close()
+                print("[INFO] Browser closed gracefully.")
+            except Exception:
+                pass
 
     # 팝업/모달 제거
     async def _clear_overlays(self):

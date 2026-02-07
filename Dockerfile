@@ -1,5 +1,5 @@
 # Playwright 공식 이미지 
-FROM mcr.microsoft.com/playwright/python:v1.57.0-jammy
+FROM mcr.microsoft.com/playwright/python:v1.58.0-jammy
 
 # 파이썬 로그 즉시 출력 (버퍼링 끔)
 ENV PYTHONUNBUFFERED=1

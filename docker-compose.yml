@@ -8,6 +8,7 @@ services:
     volumes:
       - ./data:/app/data
     command: ["python", "main.py", "--mode", "history", "--start", "${HISTORY_START}", "--end", "${HISTORY_END}"]
+    restart: "no"
     environment:
       - TZ=${TZ}
 
@@ -20,7 +21,7 @@ services:
     volumes:
       - ./data:/app/data
     command: ["python", "main.py","--mode", "interval", "--interval", "${INTERVAL_SEC}"]
-    restart: unless-stopped
+    restart: "no"
     environment:
       - TZ=${TZ}
 
@@ -33,7 +34,7 @@ services:
     volumes:
       - ./data:/app/data
     command: ["python", "main.py","--mode", "cron", "--hour", "${CRON_HOUR}"]
-    restart: unless-stopped
+    restart: "no"
     environment:
       - TZ=${TZ}
 
@@ -48,6 +49,6 @@ services:
     command: ["streamlit", "run", "dashboard.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
     ports:
       - "8501:8501"
-    restart: unless-stopped
+    restart: "no"
     environment:
       - TZ=${TZ}

@@ -1,6 +1,10 @@
 # Playwright 공식 이미지 
 FROM mcr.microsoft.com/playwright/python:v1.58.0-jammy
 
+# 서버 속도 최적화를 위한 국내 미러 사용
+RUN sed -i 's/archive.ubuntu.com/mirror.kakao.com/g' /etc/apt/sources.list && \
+    sed -i 's/security.ubuntu.com/mirror.kakao.com/g' /etc/apt/sources.list
+
 # 파이썬 로그 즉시 출력 (버퍼링 끔)
 ENV PYTHONUNBUFFERED=1
 
@@ -22,8 +26,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 3. 나머지 소스 코드 복사
+# 나머지 소스 코드 복사
 COPY . .
 
-# 4. 실행 명령어
+# 실행 명령어
 CMD ["python", "main.py"]

@@ -1,10 +1,9 @@
-version: '3.8'
-
 services:
   # 1. 과거 데이터 수집 
   history-loader:
     build: .
     image: nuri-crawler
+    init: true
     container_name: nuri-history
     volumes:
       - ./data:/app/data
@@ -16,6 +15,7 @@ services:
   monitor-interval:
     build: .
     image: nuri-crawler
+    init: true
     container_name: nuri-interval
     volumes:
       - ./data:/app/data
@@ -28,6 +28,7 @@ services:
   monitor-cron:
     build: .
     image: nuri-crawler
+    init: true
     container_name: nuri-cron
     volumes:
       - ./data:/app/data
@@ -40,6 +41,7 @@ services:
   dashboard:
     build: .
     image: nuri-crawler 
+    init: true
     container_name: nuri-dashboard
     volumes:
       - ./data:/app/data  

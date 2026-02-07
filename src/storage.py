@@ -1,5 +1,7 @@
 import os
+import sys
 import json
+import signal
 import asyncio
 import atexit
 import pandas as pd
@@ -28,8 +30,20 @@ class DataStorage:
 
         # 프로그램 종료 시, 버퍼에 남은 데이터 저장
         atexit.register(self._cleanup)
+        # Docker 종료 신호 처리
+        signal.signal(signal.SIGTERM, self._handle_sigterm)
+        signal.signal(signal.SIGINT, self._handle_sigterm)
+
+    def _handle_sigterm(self, signum, frame):
+        print("[SYSTEM] Docker 종료 신호 감지. 데이터 저장 중...")
+        self._cleanup()
+        print("[SYSTEM] 종료 완료.")
+        sys.exit(0)
 
     def _cleanup(self):
+        if not self.excel_buffer:
+            return
+
         if self.excel_buffer:
             print(f"[INFO] 프로그램 종료 전 버퍼에 남은 {len(self.excel_buffer)}건 엑셀 저장 중...")
             self._flush_to_excel(self.excel_buffer, is_async=False)

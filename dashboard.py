@@ -48,8 +48,6 @@ else:
     last_time = df['수집일시'].max() if '수집일시' in df.columns else "-"
     col2.metric("⏱️ 최근 수집", str(last_time)[5:16]) 
     
-    file_count = df['첨부파일_개수'].sum() if '첨부파일_개수' in df.columns else 0
-    col3.metric("📎 수집된 파일 수", f"{file_count}개")
 
     # 검색 필터
     st.subheader("🔍 데이터 검색")

@@ -1,6 +1,9 @@
 # Playwright 공식 이미지 
 FROM mcr.microsoft.com/playwright/python:v1.58.0-jammy
 
+# 비대화형 설치 모드 설정
+ARG DEBIAN_FRONTEND=noninteractive
+
 # 서버 속도 최적화를 위한 국내 미러 사용
 RUN sed -i 's/archive.ubuntu.com/mirror.kakao.com/g' /etc/apt/sources.list && \
     sed -i 's/security.ubuntu.com/mirror.kakao.com/g' /etc/apt/sources.list

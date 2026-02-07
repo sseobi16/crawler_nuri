@@ -1,73 +1,177 @@
 import argparse
 import sys
-import os
-from datetime import datetime
+import asyncio
+from datetime import datetime, timedelta
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-# 환경 검증
-try:
-    import pandas as pd
-    from playwright.async_api import async_playwright
-    from apscheduler.schedulers.asyncio import AsyncIOScheduler
-    print("[System] 필수 라이브러리 로드 성공")
-except ImportError as e:
-    print(f"\n[Error] 라이브러리 로드 실패: {e}")
-    sys.exit(1)
+from src.storage import DataStorage
+from src.crawler import NuriCrawler
+from src.utils import get_today_str, get_yesterday_str
 
-def parse_arguments():
+def validate_arguments(args):
+    if args.mode == "history":
+        if not args.start or not args.end:
+            print("[ERROR] 'history' 모드는 --start와 --end 날짜가 필수입니다.")
+            sys.exit(1)
+        
+        try:
+            # 날짜 포맷 검증
+            if len(args.start) != 8 or not args.start.isdigit():
+                raise ValueError(f"시작일({args.start})은 8자리 숫자여야 합니다.")
+            if len(args.end) != 8 or not args.end.isdigit():
+                raise ValueError(f"종료일({args.end})은 8자리 숫자여야 합니다.")
+            
+            start_dt = datetime.strptime(args.start, "%Y%m%d")
+            end_dt = datetime.strptime(args.end, "%Y%m%d")
+            
+            # 시작일이 종료일보다 늦으면 안 됨
+            if start_dt > end_dt:
+                print(f"[ERROR] 시작일({args.start})이 종료일({args.end})보다 늦을 수 없습니다.")
+                sys.exit(1)
+                
+            # 미래 날짜 방지 
+            if end_dt > datetime.now():
+                print("[ERROR] 종료일이 미래입니다. 오늘 날짜까지만 검색될 수 있습니다.")
+                sys.exit(1)
+                
+        except ValueError as ve:
+            print("[ERROR] 날짜 형식이 올바르지 않습니다.")
+            print(f"원인: {ve}")
+            sys.exit(1)
 
-    parser = argparse.ArgumentParser(description="누리장터 입찰공고 수집 시스템")
-    
-    # 실행 모드 선택 (history / interval / cron)
-    parser.add_argument(
-        "--mode", 
-        choices=["history", "interval", "cron"], 
-        required=True, 
-        help="실행 모드 선택 (history: 과거수집 / interval: 주기적 실행 / cron: 정기실행)"
-    )
-    
-    # History 모드용 날짜 (YYYYMMDD)
-    parser.add_argument("--start", type=str, help="수집 시작일 (YYYYMMDD)")
-    parser.add_argument("--end", type=str, help="수집 종료일 (YYYYMMDD)")
-    
-    # Interval 모드용 간격 (초 단위, 기본값 600초=10분)
-    parser.add_argument("--interval", type=int, default=600, help="실행 간격 (초)")
-    
-    # Cron 모드용 시간 (0~23시, 기본값 9시)
-    parser.add_argument("--hour", type=int, default=9, help="매일 실행할 시간 (0-23)")
+    # 2. Interval 모드 검증
+    elif args.mode == "interval":
+        if args.interval < 60:
+            print("[ERROR] --interval은 최소 60초 이상이어야 합니다.")
+            sys.exit(1)
 
-    return parser.parse_args()
+        if args.interval > 86400:
+            print(f"[WARN] --interval 값이 매우 큽니다 ({args.interval}초). 권장 최대값은 86400초(24시간)입니다.")
+            sys.exit(1)
+
+    # 3. Cron 모드 검증
+    elif args.mode == "cron":
+        if not (0 <= args.hour <= 23):
+            print(f"[ERROR] --hour 값은 0부터 23 사이의 정수여야 합니다. (입력값: {args.hour})")
+            sys.exit(1)
+
+    # 불필요 파라미터 경고 (무시 처리)
+    if args.mode != "history" and (args.start or args.end):
+        print("[WARN] 현재 모드에서는 --start, --end 파라미터가 무시됩니다.")
+
+    return True
+
+async def run_task(mode, args, storage):
+
+    # 디버깅 시 False
+    crawler = NuriCrawler(headless=True) 
+
+    try:
+        await crawler.start_browser()
+        
+        # 날짜 범위 설정
+        start_date = ""
+        end_date = ""
+        stop_on_duplicate = False
+
+        if mode == "history":
+            start_date = args.start
+            end_date = args.end
+            # History 모드는 중복이 있어도 멈추지 않고 기간 내 데이터를 모두 갱신/확인
+            stop_on_duplicate = False 
+        else:
+            # Interval / Cron 모드
+            start_date = get_yesterday_str()
+            end_date = get_today_str()
+            # 이미 수집한 데이터가 나오면 즉시 종료
+            stop_on_duplicate = True
+
+        # 검색 수행
+        search_success = await crawler.search_period(start_date, end_date)
+        
+        if search_success:
+            # 데이터 처리 콜백 함수 정의
+            # check_only=True: ID 중복 여부만 리턴 (True: 진행, False: 중복/스킵)
+            # check_only=False: 데이터 저장 수행
+            def save_callback(data, notice_id, check_only=False):
+
+                is_new = storage.is_new(notice_id)
+                
+                if check_only:
+                    # 새로운 데이터면 진행(True), 아니면 스킵(False)
+                    return is_new
+                
+                if data:
+                    storage.save_data(data, notice_id)
+                    return True
+                return False
+
+            # 페이지 순회 시작
+            await crawler.crawl_period_pages(
+                save_callback=save_callback,
+                stop_on_duplicate=stop_on_duplicate,
+                cutoff_date=start_date
+            )
+            
+    except Exception as e:
+        print(f"[Error] Crawler task error: {e}")
+    finally:
+        await crawler.close_browser()
+
 
 def main():
     
-    args = parse_arguments()
+    parser = argparse.ArgumentParser(description="누리장터 입찰공고 수집 시스템")
+    parser.add_argument("--mode", choices=["history", "interval", "cron"], required=True, help="Execution mode")
+    parser.add_argument("--start", type=str, help="Start date (YYYYMMDD) for history mode")
+    parser.add_argument("--end", type=str, help="End date (YYYYMMDD) for history mode")
+    parser.add_argument("--interval", type=int, default=600, help="Interval seconds (default: 600)")
+    parser.add_argument("--hour", type=int, default=9, help="Cron hour (0-23)")
     
-    print(f"누리장터 크롤러 시스템 가동")
-    print(f"시스템 시간 (KST): {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} + \n")
+    args = parser.parse_args()
 
-    # 모드별 설정 값 검증 및 로깅
+    # 인자 검증
+    validate_arguments(args)
+
+    # 저장소 초기화
+    storage = DataStorage()
+    print(f"[System] Storage loaded. Current items: {storage.get_stats()}")
+
+    # 모드별 실행 로직
     if args.mode == "history":
-        print("과거 데이터 수집 (History Mode)")
-        
-        # 유효성 검사: 날짜 인자 필수
         if not args.start or not args.end:
-            print("[Error] History 모드는 --start와 --end 인자가 필수입니다.")
-            print("예시: python main.py --mode history --start 20260101 --end 20260131")
+            print("[ERROR] History mode requires --start and --end arguments.")
             sys.exit(1)
             
-        print(f"- 수집 구간: {args.start} ~ {args.end}")
-        print("- 동작 방식: 지정된 기간의 모든 공고를 수집합니다. + \n")
+        print(f"[System] Starting History Mode: {args.start} ~ {args.end}")
+        asyncio.run(run_task("history", args, storage))
 
     elif args.mode == "interval":
-        print("실시간 간격 감시 (Interval Mode)")
-        print(f"- 실행 주기: {args.interval}초 ({args.interval/60:.1f}분)")
-        print("- 동작 방식: 주기적으로 접속하여 신규 공고만 수집하고 종료합니다. + \n")
+        print(f"[System] Starting Interval Mode (Every {args.interval}s)")
+        scheduler = AsyncIOScheduler()
+        
+        # 첫 실행
+        scheduler.add_job(run_task, 'date', args=["interval", args, storage])
+        # 주기적 실행
+        scheduler.add_job(run_task, 'interval', seconds=args.interval, args=["interval", args, storage])
+        
+        scheduler.start()
+        try:
+            asyncio.get_event_loop().run_forever()
+        except (KeyboardInterrupt, SystemExit):
+            print("[System] Scheduler stopped.")
 
     elif args.mode == "cron":
-        print("정기 스케줄 실행 (Cron Mode)")
-        print(f"- 실행 시간: 매일 오전 {args.hour}시")
-        print("- 동작 방식: 하루에 한 번, 정해진 시간에 수집을 수행합니다. + \n")
-
-    print("환경 설정 및 인자 검증 완료.")
+        print(f"[System] Starting Cron Mode (Daily at {args.hour}:00)")
+        scheduler = AsyncIOScheduler()
+        
+        scheduler.add_job(run_task, 'cron', hour=args.hour, args=["cron", args, storage])
+        
+        scheduler.start()
+        try:
+            asyncio.get_event_loop().run_forever()
+        except (KeyboardInterrupt, SystemExit):
+            print("[System] Scheduler stopped.")
 
 if __name__ == "__main__":
     main()

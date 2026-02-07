@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import atexit
 import pandas as pd
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
@@ -24,6 +25,15 @@ class DataStorage:
         self.excel_buffer = [] 
         self.BUFFER_SIZE = 10  # 데이터 10개마다 엑셀 저장
         self.executor = ThreadPoolExecutor(max_workers=1) 
+
+        # 프로그램 종료 시, 버퍼에 남은 데이터 저장
+        atexit.register(self._cleanup)
+
+    def _cleanup(self):
+        if self.excel_buffer:
+            print(f"[INFO] 프로그램 종료 전 버퍼에 남은 {len(self.excel_buffer)}건 엑셀 저장 중...")
+            self._flush_to_excel(self.excel_buffer, is_async=False)
+            self.excel_buffer = []
 
     def _load_visited_ids(self):
         ids = set()
@@ -75,7 +85,7 @@ class DataStorage:
         except Exception as e:
             print(f"[ERROR] Save failed ({notice_id}): {e}")
 
-    def _flush_to_excel(self, data_list):
+    def _flush_to_excel(self, data_list, is_async=True):
         try:
             # 데이터 변환 (Jsonl -> 엑셀 Row)
             flattened_rows = []
@@ -86,18 +96,36 @@ class DataStorage:
                     "수집일시": item.get("crawled_at")
                 }
                 
-                # '공고일반' 정보 펼치기
                 sections = item.get("sections", {})
-                general_info = sections.get("공고일반", {})
-                if isinstance(general_info, dict):
-                    for key, value in general_info.items():
-                        if key not in row: row[key] = value
+                for section_name, section_data in sections.items():
+                    
+                    # 테이블 데이터 - 키를 컬럼으로 사용
+                    if isinstance(section_data, dict):
+                        for key, value in section_data.items():
+                            # 컬럼명 충돌 방지 (섹션명_키)
+                            # 공고일반은 자주 쓰니까 접두어 없이, 나머지는 접두어 붙임
+                            col_name = key if section_name == "공고일반" else f"{section_name}_{key}"
+                            if col_name not in row:
+                                row[col_name] = value
+
+                    # 그리드 데이터 - 요약 정보로 변환
+                    elif isinstance(section_data, list):
+                        summary_list = []
+                        for idx, grid_row in enumerate(section_data):
+                            row_str = " | ".join([str(v) for v in grid_row.values()])
+                            summary_list.append(f"[{idx+1}] {row_str}")                        
+                        row[section_name] = "\n".join(summary_list)
                 
                 # 첨부파일 정보 요약
                 files = item.get("files", [])
                 row["첨부파일_개수"] = len(files)
-                file_names = [f.get("orgnlAtchFileNm", "") for f in files]
-                row["첨부파일_목록"] = ", ".join(file_names)
+                
+                file_names = []
+                for f in files:
+                    name = f.get("파일명") or f.get("orgnlAtchFileNm")
+                    file_names.append(name)
+                    
+                row["첨부파일_목록"] = "\n".join(file_names)
 
                 flattened_rows.append(row)
 
@@ -109,6 +137,8 @@ class DataStorage:
                 final_df = pd.concat([existing_df, new_df], ignore_index=True)
             else:
                 final_df = new_df
+            if not is_async:
+                print("종료 전 엑셀 저장 실행")
 
             # 최종 저장
             final_df.to_excel(self.output_excel, index=False)

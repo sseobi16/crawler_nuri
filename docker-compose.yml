@@ -35,3 +35,14 @@ services:
     restart: unless-stopped
     environment:
       - TZ=${TZ}
+
+# 4. 대시보드
+  dashboard:
+    build: .
+    container_name: nuri_dashboard
+    command: streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0
+    volumes:
+      - ./data:/app/data  
+    ports:
+      - "8501:8501"
+    restart: unless-stopped

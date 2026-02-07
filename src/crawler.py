@@ -32,8 +32,16 @@ class NuriCrawler:
     async def start_browser(self):
         print("[INFO] Starting browser...")
         p = await async_playwright().start()
-        # 디버깅 시 headless=False 사용
-        self.browser = await p.chromium.launch(headless=self.headless)
+        self.browser = await p.chromium.launch(
+            headless=self.headless,
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+                "--disable-extensions"
+            ]
+        )
         
         self.context = await self.browser.new_context(
             viewport={"width": 1920, "height": 1080},

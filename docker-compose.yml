@@ -36,13 +36,16 @@ services:
     environment:
       - TZ=${TZ}
 
-# 4. 대시보드
+# 4. 실시간 대시보드
   dashboard:
     build: .
-    container_name: nuri_dashboard
-    command: streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0
+    image: nuri-crawler 
+    container_name: nuri-dashboard
     volumes:
       - ./data:/app/data  
+    command: ["streamlit", "run", "dashboard.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
     ports:
       - "8501:8501"
+    environment:
+      - TZ=${TZ}
     restart: unless-stopped

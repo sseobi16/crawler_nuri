@@ -4,6 +4,23 @@ from datetime import datetime
 from playwright.async_api import async_playwright, TimeoutError
 from src.utils import clean_text
 
+# 재시도 데코레이터
+def retry_action(max_retries=3, delay=2):
+    def decorator(func):
+        async def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(max_retries):
+                try:
+                    return await func(*args, **kwargs)
+                except (TimeoutError, Exception) as e:
+                    last_exception = e
+                    print(f"[WARN] Action failed ({func.__name__}), retrying {attempt + 1}/{max_retries}... Error: {e}")
+                    await asyncio.sleep(delay)
+            print(f"[ERROR] Action failed after {max_retries} attempts.")
+            raise last_exception
+        return wrapper
+    return decorator
+
 class NuriCrawler:
     def __init__(self, headless=True):
         self.base_url = "https://nuri.g2b.go.kr/"
@@ -15,8 +32,16 @@ class NuriCrawler:
     async def start_browser(self):
         print("[INFO] Starting browser...")
         p = await async_playwright().start()
-        # 디버깅 시 headless=False 사용
-        self.browser = await p.chromium.launch(headless=self.headless)
+        self.browser = await p.chromium.launch(
+            headless=self.headless,
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+                "--disable-extensions"
+            ]
+        )
         
         self.context = await self.browser.new_context(
             viewport={"width": 1920, "height": 1080},
@@ -34,8 +59,11 @@ class NuriCrawler:
 
     async def close_browser(self):
         if self.browser:
-            await self.browser.close()
-            print("[INFO] Browser closed.")
+            try:
+                await self.browser.close()
+                print("[INFO] Browser closed gracefully.")
+            except Exception:
+                pass
 
     # 팝업/모달 제거
     async def _clear_overlays(self):
@@ -92,6 +120,7 @@ class NuriCrawler:
             print(f"[ERROR] Date input failed ({selector}): {e}")
 
     # 입찰 공고 목록 검색 
+    @retry_action(max_retries=3, delay=2)
     async def search_period(self, start_date, end_date):
             
             print(f"[INFO] Search initiated: {start_date} ~ {end_date}")
@@ -345,6 +374,7 @@ class NuriCrawler:
         return detail_data
 
     # 입찰 공고 목록 상세 페이지 조회
+    @retry_action(max_retries=3, delay=2)
     async def crawl_period_pages(self, save_callback, stop_on_duplicate=False, cutoff_date=None):
 
         current_page = 1

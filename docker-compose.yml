@@ -1,14 +1,14 @@
-version: '3.8'
-
 services:
   # 1. 과거 데이터 수집 
   history-loader:
     build: .
     image: nuri-crawler
+    init: true
     container_name: nuri-history
     volumes:
       - ./data:/app/data
-    command: ["--mode", "history", "--start", "${HISTORY_START}", "--end", "${HISTORY_END}"]
+    command: ["python", "main.py", "--mode", "history", "--start", "${HISTORY_START}", "--end", "${HISTORY_END}"]
+    restart: "no"
     environment:
       - TZ=${TZ}
 
@@ -16,11 +16,12 @@ services:
   monitor-interval:
     build: .
     image: nuri-crawler
+    init: true
     container_name: nuri-interval
     volumes:
       - ./data:/app/data
-    command: ["--mode", "interval", "--interval", "${INTERVAL_SEC}"]
-    restart: unless-stopped
+    command: ["python", "main.py","--mode", "interval", "--interval", "${INTERVAL_SEC}"]
+    restart: "no"
     environment:
       - TZ=${TZ}
 
@@ -28,10 +29,26 @@ services:
   monitor-cron:
     build: .
     image: nuri-crawler
+    init: true
     container_name: nuri-cron
     volumes:
       - ./data:/app/data
-    command: ["--mode", "cron", "--hour", "${CRON_HOUR}"]
-    restart: unless-stopped
+    command: ["python", "main.py","--mode", "cron", "--hour", "${CRON_HOUR}"]
+    restart: "no"
+    environment:
+      - TZ=${TZ}
+
+# 4. 실시간 대시보드
+  dashboard:
+    build: .
+    image: nuri-crawler 
+    init: true
+    container_name: nuri-dashboard
+    volumes:
+      - ./data:/app/data  
+    command: ["streamlit", "run", "dashboard.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
+    ports:
+      - "8501:8501"
+    restart: "no"
     environment:
       - TZ=${TZ}

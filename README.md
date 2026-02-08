@@ -5,7 +5,7 @@
 ## 개발 환경 및 의존성
 Docker 환경에서의 실행을 최우선으로 지원합니다. 로컬 실행 시 아래의 버전 및 라이브러리가 필요합니다
 
-* Python(v3.10)
+* Python(v3.10): 도커 playwright 이미지와 동일 버전
 * Playwright(v1.58.0): 동적 웹 페이지 크롤링 및 브라우저 제어
 * Pandas(v2.2.0) & OpenPyXL(v3.1.5): 데이터 처리 및 엑셀 파일 변환
 * APScheduler(v3.10.4): 주기적 작업(Interval/Cron) 스케줄링
